@@ -133,11 +133,11 @@ class SettingsMigrator
         return $this->repository->getPropertyPayload($group, $name);
     }
 
-    protected function createProperty(string $property, $payload): void
+    protected function createProperty(string $property, $payload, string $type, string $description): void
     {
         ['group' => $group, 'name' => $name] = $this->getPropertyParts($property);
 
-        $this->repository->createProperty($group, $name, $payload);
+        $this->repository->createProperty($group, $name, $payload, $type, $description);
     }
 
     protected function updatePropertyPayload(string $property, $payload): void

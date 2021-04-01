@@ -22,7 +22,7 @@ interface SettingsRepository
     /**
      * Create a property within a group with a payload
      */
-    public function createProperty(string $group, string $name, $payload): void;
+    public function createProperty(string $group, string $name, $payload, string $type, string $description): void;
 
     /**
      * Update the payload of a property within a group
