@@ -56,7 +56,7 @@ class DatabaseSettingsRepository implements SettingsRepository
         return json_decode($setting['payload']);
     }
 
-    public function createProperty(string $group, string $name, $payload): void
+    public function createProperty(string $group, string $name, $payload, string $type, string $description): void
     {
         $this->propertyModel::on($this->connection)->create([
             'group' => $group,
