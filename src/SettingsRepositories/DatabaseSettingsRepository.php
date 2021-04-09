@@ -2,7 +2,10 @@
 
 namespace Spatie\LaravelSettings\SettingsRepositories;
 
+use App\Models\UnityModel;
 use DB;
+use Illuminate\Database\Query\Builder;
+use Illuminate\Support\Collection;
 use Spatie\LaravelSettings\Models\SettingsProperty;
 
 class DatabaseSettingsRepository implements SettingsRepository
@@ -21,91 +24,170 @@ class DatabaseSettingsRepository implements SettingsRepository
 
     public function getPropertiesInGroup(string $group): array
     {
+        // It means we are editing the settings, so we don't want to
+        // rely on the current set Unity.
+        if (request()->routeIs('admin.settings.*')) {
+            $unityId = session()->has('settings_scope') && 'global' !== session()->get('settings_scope')
+                ? (int) session()->get('settings_scope')
+                : null;
+        } else {
+            $unityId = null !== UnityModel::current() ? UnityModel::current()->id : null;
+        }
+
         /**
          * @var \Spatie\LaravelSettings\Models\SettingsProperty $temp
          * @psalm-suppress UndefinedClass
          */
         $temp = new $this->propertyModel;
 
-        return DB::connection($this->connection ?? $temp->getConnectionName())
+        $settings = DB::connection($this->connection ?? $temp->getConnectionName())
             ->table($temp->getTable())
-            ->where('group', $group)
-            ->get(['name', 'payload'])
-            ->mapWithKeys(function ($object) {
-                return [$object->name => json_decode($object->payload, true)];
+            ->where(SettingsProperty::GROUP, $group)
+            ->whereNull(SettingsProperty::UNITY_ID)
+            ->get([
+                SettingsProperty::NAME,
+                SettingsProperty::PAYLOAD,
+            ]);
+
+        if ($unityId) {
+            $scoped = DB::connection($this->connection ?? $temp->getConnectionName())
+                ->table($temp->getTable())
+                ->where(SettingsProperty::GROUP, $group)
+                ->where(SettingsProperty::UNITY_ID, '=', $unityId)
+                ->get([
+                    SettingsProperty::NAME,
+                    SettingsProperty::PAYLOAD,
+                ]);
+
+            $settings = collect($settings)->map(function ($item) use ($scoped) {
+                $found = $scoped->first(function ($property) use ($item) {
+                    return $property->{SettingsProperty::NAME} === $item->{SettingsProperty::NAME};
+                });
+
+                if (null !== $found) {
+                    $item->{SettingsProperty::PAYLOAD} = $found->{SettingsProperty::PAYLOAD};
+                }
+
+                return $item;
+            });
+        }
+
+        return collect($settings)
+            ->mapWithKeys(function ($item) {
+                return [$item->{SettingsProperty::NAME} => json_decode($item->{SettingsProperty::PAYLOAD}, true)];
             })
             ->toArray();
     }
 
-    public function checkIfPropertyExists(string $group, string $name): bool
+    public function checkIfPropertyExists(string $group, string $name, int $unityId = null): bool
     {
         return $this->propertyModel::on($this->connection)
-            ->where('group', $group)
-            ->where('name', $name)
+            ->where(SettingsProperty::GROUP, $group)
+            ->where(SettingsProperty::UNITY_ID, $unityId)
+            ->where(SettingsProperty::NAME, $name)
             ->exists();
     }
 
-    public function getPropertyPayload(string $group, string $name)
+    public function getPropertyPayload(string $group, string $name, int $unityId = null)
     {
         $setting = $this->propertyModel::on($this->connection)
-            ->where('group', $group)
-            ->where('name', $name)
-            ->first('payload')
+            ->where(SettingsProperty::GROUP, $group)
+            ->where(SettingsProperty::UNITY_ID, $unityId)
+            ->where(SettingsProperty::NAME, $name)
+            ->first(SettingsProperty::PAYLOAD)
             ->toArray();
 
-        return json_decode($setting['payload']);
+        return json_decode($setting[SettingsProperty::PAYLOAD]);
     }
 
-    public function createProperty(string $group, string $name, $payload, string $type, string $description): void
+    public function createProperty(
+        string $group,
+        string $name,
+        $payload,
+        string $type,
+        string $label,
+        int $unityId = null,
+        array $options = null,
+        bool $isUnique = false,
+        bool $encrypted = false
+    ): void
     {
         $this->propertyModel::on($this->connection)->create([
-            'group' => $group,
-            'name' => $name,
-            'payload' => json_encode($payload),
-            'locked' => false,
+            SettingsProperty::GROUP => $group,
+            SettingsProperty::NAME => $name,
+            SettingsProperty::LOCKED => false,
+            SettingsProperty::PAYLOAD => json_encode($payload),
+            SettingsProperty::TYPE => $type,
+            SettingsProperty::OPTIONS => $options,
+            SettingsProperty::IS_UNIQUE => $isUnique,
+            SettingsProperty::IS_ENCRYPTED => $encrypted,
+            SettingsProperty::LABEL => $label,
+            SettingsProperty::UNITY_ID => $unityId,
         ]);
     }
 
-    public function updatePropertyPayload(string $group, string $name, $value): void
+    public function updatePropertyPayload(
+        string $group,
+        string $name,
+        $payload,
+        int $unityId = null,
+        bool $encrypted = false
+    ): void
     {
-        $this->propertyModel::on($this->connection)
-            ->where('group', $group)
-            ->where('name', $name)
+        if ($unityId === null) {
+            if (request()->routeIs('admin.settings.*')) {
+                $unityId = session()->has('settings_scope') && 'global' !== session()->get('settings_scope')
+                    ? (int) session()->get('settings_scope')
+                    : null;
+            } else {
+                $unityId = null !== UnityModel::current() ? UnityModel::current()->id : null;
+            }
+        }
+
+        $result = $this->propertyModel::on($this->connection)
+            ->where(SettingsProperty::GROUP, $group)
+            ->where(SettingsProperty::NAME, $name)
+            ->where(SettingsProperty::UNITY_ID, $unityId)
             ->update([
-                'payload' => json_encode($value),
+                SettingsProperty::PAYLOAD => json_encode($payload),
+                SettingsProperty::IS_ENCRYPTED => $encrypted,
             ]);
     }
 
-    public function deleteProperty(string $group, string $name): void
+    public function deleteProperty(string $group, string $name, int $unityId = null): void
     {
         $this->propertyModel::on($this->connection)
-            ->where('group', $group)
-            ->where('name', $name)
+            ->where(SettingsProperty::GROUP, $group)
+            ->where(SettingsProperty::NAME, $name)
+            ->where(SettingsProperty::UNITY_ID, $unityId)
             ->delete();
     }
 
-    public function lockProperties(string $group, array $properties): void
+    public function lockProperties(string $group, array $properties, int $unityId = null): void
     {
         $this->propertyModel::on($this->connection)
-            ->where('group', $group)
-            ->whereIn('name', $properties)
-            ->update(['locked' => true]);
+            ->where(SettingsProperty::GROUP, $group)
+            ->where(SettingsProperty::UNITY_ID, $unityId)
+            ->whereIn(SettingsProperty::NAME, $properties)
+            ->update([SettingsProperty::LOCKED => true]);
     }
 
-    public function unlockProperties(string $group, array $properties): void
+    public function unlockProperties(string $group, array $properties, int $unityId = null): void
     {
         $this->propertyModel::on($this->connection)
-            ->where('group', $group)
-            ->whereIn('name', $properties)
-            ->update(['locked' => false]);
+            ->where(SettingsProperty::GROUP, $group)
+            ->where(SettingsProperty::UNITY_ID, $unityId)
+            ->whereIn(SettingsProperty::NAME, $properties)
+            ->update([SettingsProperty::LOCKED => false]);
     }
 
-    public function getLockedProperties(string $group): array
+    public function getLockedProperties(string $group, int $unityId = null): array
     {
         return $this->propertyModel::on($this->connection)
-            ->where('group', $group)
-            ->where('locked', true)
-            ->pluck('name')
+            ->where(SettingsProperty::GROUP, $group)
+            ->where(SettingsProperty::UNITY_ID, $unityId)
+            ->where(SettingsProperty::LOCKED, true)
+            ->pluck(SettingsProperty::NAME)
             ->toArray();
     }
 }
