@@ -7,6 +7,7 @@ use Spatie\LaravelSettings\Exceptions\InvalidSettingName;
 use Spatie\LaravelSettings\Exceptions\SettingAlreadyExists;
 use Spatie\LaravelSettings\Exceptions\SettingDoesNotExist;
 use Spatie\LaravelSettings\Factories\SettingsRepositoryFactory;
+use Spatie\LaravelSettings\Models\SettingsProperty;
 use Spatie\LaravelSettings\SettingsRepositories\SettingsRepository;
 use Spatie\LaravelSettings\Support\Crypto;
 
@@ -26,27 +27,18 @@ class SettingsMigrator
         return $this;
     }
 
-    public function rename(string $from, string $to): void
+    public function add(
+        string $property,
+        $value,
+        string $type,
+        string $label,
+        int $unityId = null,
+        bool $encrypted = false,
+        array $options = null,
+        bool $isUnique = false
+    ): void
     {
-        if (! $this->checkIfPropertyExists($from)) {
-            throw SettingDoesNotExist::whenRenaming($from, $to);
-        }
-
-        if ($this->checkIfPropertyExists($to)) {
-            throw SettingAlreadyExists::whenRenaming($from, $to);
-        }
-
-        $this->createProperty(
-            $to,
-            $this->getPropertyPayload($from)
-        );
-
-        $this->deleteProperty($from);
-    }
-
-    public function add(string $property, $value, bool $encrypted = false): void
-    {
-        if ($this->checkIfPropertyExists($property)) {
+        if ($this->checkIfPropertyExists($property, $unityId)) {
             throw SettingAlreadyExists::whenAdding($property);
         }
 
@@ -54,21 +46,26 @@ class SettingsMigrator
             $value = Crypto::encrypt($value);
         }
 
-        $this->createProperty($property, $value);
+        $this->createProperty($property, $value, $type, $label, $unityId, $options, $isUnique, $encrypted);
     }
 
-    public function delete(string $property): void
+    public function delete(string $property, int $unityId = null): void
     {
-        if (! $this->checkIfPropertyExists($property)) {
+        if (! $this->checkIfPropertyExists($property, $unityId)) {
             throw SettingDoesNotExist::whenDeleting($property);
         }
 
-        $this->deleteProperty($property);
+        $this->deleteProperty($property, $unityId);
     }
 
-    public function update(string $property, Closure $closure, bool $encrypted = false): void
+    public function update(
+        string $property,
+        Closure $closure,
+        bool $encrypted = false,
+        int $unityId = null
+    ): void
     {
-        if (! $this->checkIfPropertyExists($property)) {
+        if (! $this->checkIfPropertyExists($property, $unityId)) {
             throw SettingDoesNotExist::whenEditing($property);
         }
 
@@ -80,27 +77,39 @@ class SettingsMigrator
             ? Crypto::encrypt($closure($originalPayload))
             : $closure($originalPayload);
 
-        $this->updatePropertyPayload($property, $updatedPayload);
+        $this->updatePropertyPayload($property, $updatedPayload, $unityId, $encrypted);
     }
 
-    public function addEncrypted(string $property, $value): void
+    public function addEncrypted(
+        string $property,
+        $value,
+        string $type,
+        string $label,
+        int $unityId = null,
+        array $options = null,
+        bool $isUnique = false
+    ): void
     {
-        $this->add($property, $value, true);
+        $this->add($property, $value, $type, $label, $unityId, true, $options, $isUnique);
     }
 
-    public function updateEncrypted(string $property, Closure $closure): void
+    public function updateEncrypted(
+        string $property,
+        Closure $closure,
+        int $unityId = null
+    ): void
     {
-        $this->update($property, $closure, true);
+        $this->update($property, $closure, true, $unityId);
     }
 
-    public function encrypt(string $property): void
+    public function encrypt(string $property, int $unityId = null): void
     {
-        $this->update($property, fn ($payload) => Crypto::encrypt($payload));
+        $this->update($property, fn($payload) => Crypto::encrypt($payload), false, $unityId);
     }
 
-    public function decrypt(string $property): void
+    public function decrypt(string $property, int $unityId = null): void
     {
-        $this->update($property, fn ($payload) => Crypto::decrypt($payload));
+        $this->update($property, fn($payload) => Crypto::decrypt($payload), false, $unityId);
     }
 
     public function inGroup(string $group, Closure $closure): void
@@ -119,38 +128,62 @@ class SettingsMigrator
         return ['group' => $propertyParts[0], 'name' => $propertyParts[1]];
     }
 
-    protected function checkIfPropertyExists(string $property): bool
+    protected function checkIfPropertyExists(string $property, int $unityId = null): bool
     {
         ['group' => $group, 'name' => $name] = $this->getPropertyParts($property);
 
-        return $this->repository->checkIfPropertyExists($group, $name);
+        return $this->repository->checkIfPropertyExists($group, $name, $unityId);
     }
 
-    protected function getPropertyPayload(string $property)
+    protected function getPropertyPayload(string $property, int $unityId = null)
     {
         ['group' => $group, 'name' => $name] = $this->getPropertyParts($property);
 
-        return $this->repository->getPropertyPayload($group, $name);
+        return $this->repository->getPropertyPayload($group, $name, $unityId);
     }
 
-    protected function createProperty(string $property, $payload, string $type, string $description): void
+    protected function createProperty(
+        string $property,
+        $payload,
+        string $type,
+        string $label,
+        int $unityId = null,
+        array $options = null,
+        bool $isUnique = false,
+        bool $encrypted = false
+    ): void
     {
         ['group' => $group, 'name' => $name] = $this->getPropertyParts($property);
 
-        $this->repository->createProperty($group, $name, $payload, $type, $description);
+        $this->repository->createProperty(
+            $group,
+            $name,
+            $payload,
+            $type,
+            $label,
+            $unityId,
+            $options,
+            $isUnique,
+            $encrypted
+        );
     }
 
-    protected function updatePropertyPayload(string $property, $payload): void
+    protected function updatePropertyPayload(
+        string $property,
+        $payload,
+        int $unityId = null,
+        bool $encrypted = false
+    ): void
     {
         ['group' => $group, 'name' => $name] = $this->getPropertyParts($property);
 
-        $this->repository->updatePropertyPayload($group, $name, $payload);
+        $this->repository->updatePropertyPayload($group, $name, $payload, $unityId, $encrypted);
     }
 
-    protected function deleteProperty(string $property): void
+    protected function deleteProperty(string $property, int $unityId = null): void
     {
         ['group' => $group, 'name' => $name] = $this->getPropertyParts($property);
 
-        $this->repository->deleteProperty($group, $name);
+        $this->repository->deleteProperty($group, $name, $unityId);
     }
 }

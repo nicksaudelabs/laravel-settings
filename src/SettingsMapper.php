@@ -2,7 +2,9 @@
 
 namespace Spatie\LaravelSettings;
 
+use App\Models\UnityModel;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Spatie\LaravelSettings\Events\LoadingSettings;
 use Spatie\LaravelSettings\Exceptions\MissingSettings;
 use Spatie\LaravelSettings\Support\Crypto;
@@ -92,6 +94,13 @@ class SettingsMapper
 
                 return $payload;
             });
+    }
+
+    public function existsInScope(string $settingsClass, string $group, string $property, int $unityId = null): bool
+    {
+        $config = $this->getConfig($settingsClass);
+
+        return $config->getRepository()->checkIfPropertyExists($group, $property, $unityId);
     }
 
     private function getConfig(string $settingsClass): SettingsConfig
