@@ -61,14 +61,18 @@ class SettingsMapper
                     $payload = $cast->set($payload);
                 }
 
+                $isEncrypted = false;
                 if ($config->isEncrypted($name)) {
                     $payload = Crypto::encrypt($payload);
+                    $isEncrypted = true;
                 }
 
                 $config->getRepository()->updatePropertyPayload(
                     $config->getGroup(),
                     $name,
-                    $payload
+                    $payload,
+                    null,
+                    $isEncrypted
                 );
             });
 
