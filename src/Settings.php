@@ -120,6 +120,11 @@ abstract class Settings implements Arrayable, Jsonable, Responsable
         $this->loadValues($data);
     }
 
+    public function existsInScope(string $group, string $property, int $unityId = null): bool
+    {
+        return $this->mapper->existsInScope(static::class, $group, $property, $unityId);
+    }
+
     /**
      * @param \Illuminate\Support\Collection|array $properties
      *
