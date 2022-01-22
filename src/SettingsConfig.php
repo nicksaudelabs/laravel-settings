@@ -122,4 +122,11 @@ class SettingsConfig
             $this->repository->getLockedProperties($this->settingsClass::group())
         );
     }
+
+    public function clearCachedLockedProperties(): self
+    {
+        unset($this->locked);
+
+        return $this;
+    }
 }

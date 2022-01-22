@@ -4,7 +4,6 @@ namespace Spatie\LaravelSettings;
 
 use App\Models\UnityModel;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Log;
 use Spatie\LaravelSettings\Events\LoadingSettings;
 use Spatie\LaravelSettings\Exceptions\MissingSettings;
 use Spatie\LaravelSettings\Support\Crypto;

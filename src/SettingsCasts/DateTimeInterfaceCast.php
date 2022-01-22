@@ -18,8 +18,12 @@ class DateTimeInterfaceCast implements SettingsCast
         $this->type = $type ?? DateTime::class;
     }
 
-    public function get($payload): DateTimeInterface
+    public function get($payload): ?DateTimeInterface
     {
+        if ($payload === null) {
+            return null;
+        }
+
         if ($this->type === Carbon::class) {
             return new Carbon($payload);
         }
@@ -42,10 +46,10 @@ class DateTimeInterfaceCast implements SettingsCast
     /**
      * @param DateTimeInterface $payload
      *
-     * @return string
+     * @return null|string
      */
-    public function set($payload): string
+    public function set($payload): ?string
     {
-        return $payload->format(DATE_ATOM);
+        return $payload?->format(DATE_ATOM);
     }
 }

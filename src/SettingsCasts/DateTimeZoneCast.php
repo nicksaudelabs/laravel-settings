@@ -27,8 +27,6 @@ class DateTimeZoneCast implements SettingsCast
      */
     public function set($payload): ?string
     {
-        return $payload !== null
-            ? $payload->getName()
-            : null;
+        return $payload?->getName();
     }
 }

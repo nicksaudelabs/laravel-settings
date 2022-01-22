@@ -3,11 +3,15 @@
 namespace Spatie\LaravelSettings\Migrations;
 
 use Closure;
+use Illuminate\Support\Collection;
 use Spatie\LaravelSettings\Exceptions\InvalidSettingName;
 use Spatie\LaravelSettings\Exceptions\SettingAlreadyExists;
 use Spatie\LaravelSettings\Exceptions\SettingDoesNotExist;
 use Spatie\LaravelSettings\Factories\SettingsRepositoryFactory;
 use Spatie\LaravelSettings\Models\SettingsProperty;
+use Spatie\LaravelSettings\SettingsCasts\SettingsCast;
+use Spatie\LaravelSettings\SettingsConfig;
+use Spatie\LaravelSettings\SettingsContainer;
 use Spatie\LaravelSettings\SettingsRepositories\SettingsRepository;
 use Spatie\LaravelSettings\Support\Crypto;
 
@@ -25,6 +29,24 @@ class SettingsMigrator
         $this->repository = SettingsRepositoryFactory::create($name);
 
         return $this;
+    }
+
+    public function rename(string $from, string $to): void
+    {
+        if (! $this->checkIfPropertyExists($from)) {
+            throw SettingDoesNotExist::whenRenaming($from, $to);
+        }
+
+        if ($this->checkIfPropertyExists($to)) {
+            throw SettingAlreadyExists::whenRenaming($from, $to);
+        }
+
+        $this->createProperty(
+            $to,
+            $this->getPropertyPayload($from)
+        );
+
+        $this->deleteProperty($from);
     }
 
     public function add(
@@ -185,5 +207,19 @@ class SettingsMigrator
         ['group' => $group, 'name' => $name] = $this->getPropertyParts($property);
 
         $this->repository->deleteProperty($group, $name, $unityId);
+    }
+
+    protected function getCast(string $group, string $name): ?SettingsCast
+    {
+        return optional($this->settingsGroups()->get($group))->getCast($name);
+    }
+
+    protected function settingsGroups(): Collection
+    {
+        return app(SettingsContainer::class)
+            ->getSettingClasses()
+            ->mapWithKeys(fn (string $settingsClass) => [
+                $settingsClass::group() => new SettingsConfig($settingsClass),
+            ]);
     }
 }

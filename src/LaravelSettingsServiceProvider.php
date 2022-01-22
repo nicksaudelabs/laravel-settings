@@ -3,7 +3,6 @@
 namespace Spatie\LaravelSettings;
 
 use Illuminate\Database\Events\SchemaLoaded;
-use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use Spatie\LaravelSettings\Console\CacheDiscoveredSettingsCommand;
@@ -14,6 +13,7 @@ use Spatie\LaravelSettings\Factories\SettingsRepositoryFactory;
 use Spatie\LaravelSettings\Migrations\SettingsMigration;
 use Spatie\LaravelSettings\SettingsRepositories\SettingsRepository;
 use SplFileInfo;
+use Symfony\Component\Finder\Finder;
 
 class LaravelSettingsServiceProvider extends ServiceProvider
 {
@@ -41,7 +41,7 @@ class LaravelSettingsServiceProvider extends ServiceProvider
         Event::subscribe(SettingsEventSubscriber::class);
         Event::listen(SchemaLoaded::class, fn ($event) => $this->removeMigrationsWhenSchemaLoaded($event));
 
-        $this->loadMigrationsFrom(config('settings.migrations_path'));
+        $this->loadMigrationsFrom($this->resolveMigrationPaths());
     }
 
     public function register(): void
@@ -64,7 +64,13 @@ class LaravelSettingsServiceProvider extends ServiceProvider
 
     private function removeMigrationsWhenSchemaLoaded(SchemaLoaded $event)
     {
-        $migrations = collect(app(Filesystem::class)->files(config('settings.migrations_path')))
+        $files = Finder::create()
+            ->files()
+            ->ignoreDotFiles(true)
+            ->in($this->resolveMigrationPaths())
+            ->depth(0);
+
+        $migrations = collect(iterator_to_array($files))
             ->mapWithKeys(function (SplFileInfo $file) {
                 preg_match('/class\s*(\w*)\s*extends/', file_get_contents($file->getRealPath()), $found);
 
@@ -84,5 +90,12 @@ class LaravelSettingsServiceProvider extends ServiceProvider
             ->useWritePdo()
             ->whereIn('migration', $migrations)
             ->delete();
+    }
+
+    protected function resolveMigrationPaths(): array
+    {
+        return ! empty(config('settings.migrations_path'))
+            ? [config('settings.migrations_path')]
+            : config('settings.migrations_paths');
     }
 }

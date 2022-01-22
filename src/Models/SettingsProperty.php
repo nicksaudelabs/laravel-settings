@@ -60,11 +60,11 @@ class SettingsProperty extends Model
         self::IS_ENCRYPTED => 'boolean',
     ];
 
-    public static function boot()
+    public static function boot(): void
     {
         parent::boot();
 
-        static::creating(function (self $model) {
+        static::creating(static function (self $model) {
             $uuid = Uuid::uuid6();
 
             if (isset($model->attributes[self::UUID]) && ! empty(trim($model->attributes[self::UUID]))) {
@@ -87,7 +87,7 @@ class SettingsProperty extends Model
      *
      * @return mixed
      */
-    public static function get(string $property, int $unityId = null)
+    public static function get(string $property, int $unityId = null): mixed
     {
         [$group, $name] = explode('.', $property);
 
@@ -115,7 +115,7 @@ class SettingsProperty extends Model
      *
      * @return Builder
      */
-    public function scopeGlobalsOnly(Builder $query)
+    public function scopeGlobalsOnly(Builder $query): Builder
     {
         return $query->whereNull(self::UNITY_ID);
     }
@@ -124,10 +124,11 @@ class SettingsProperty extends Model
      * Condition to get only the properties specific to a unity.
      *
      * @param Builder $query
+     * @param int     $unityId
      *
      * @return Builder
      */
-    public function scopeScopedOnly(Builder $query, int $unityId)
+    public function scopeScopedOnly(Builder $query, int $unityId): Builder
     {
         return $query->whereNull(self::UNITY_ID);
     }

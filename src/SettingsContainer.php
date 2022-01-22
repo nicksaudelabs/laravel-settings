@@ -25,7 +25,7 @@ class SettingsContainer
         $cache = $this->container->make(SettingsCache::class);
 
         $this->getSettingClasses()->each(function (string $settingClass) use ($cache) {
-            $this->container->singleton($settingClass, function ($app) use ($cache, $settingClass) {
+            $this->container->singleton($settingClass, function () use ($cache, $settingClass) {
                 if ($cache->has($settingClass)) {
                     try {
                         return $cache->get($settingClass);
@@ -34,7 +34,7 @@ class SettingsContainer
                     }
                 }
 
-                return new $settingClass($app->make(SettingsMapper::class));
+                return new $settingClass();
             });
         });
     }
@@ -56,7 +56,7 @@ class SettingsContainer
         /** @var \Spatie\LaravelSettings\Settings[] $settings */
         $settings = array_merge(
             $this->discoverSettings(),
-            config('settings.settings')
+            config('settings.settings', [])
         );
 
         return self::$settingsClasses = collect($settings)->unique();
@@ -72,7 +72,7 @@ class SettingsContainer
     protected function discoverSettings(): array
     {
         return (new DiscoverSettings())
-            ->within(config('settings.auto_discover_settings'))
+            ->within(config('settings.auto_discover_settings', []))
             ->useBasePath(base_path())
             ->ignoringFiles(Composer::getAutoloadedFiles(base_path('composer.json')))
             ->discover();

@@ -3,30 +3,30 @@
 namespace Spatie\LaravelSettings\SettingsRepositories;
 
 use App\Models\UnityModel;
-use DB;
-use Illuminate\Database\Query\Builder;
-use Illuminate\Support\Collection;
+use Illuminate\Database\Eloquent\Builder;
 use Spatie\LaravelSettings\Models\SettingsProperty;
 
 class DatabaseSettingsRepository implements SettingsRepository
 {
-    /** @var string|\Illuminate\Database\Eloquent\Model */
+    /** @var class-string<\Illuminate\Database\Eloquent\Model> */
     protected string $propertyModel;
 
     protected ?string $connection;
 
+    protected ?string $table;
+
     public function __construct(array $config)
     {
         $this->propertyModel = $config['model'] ?? SettingsProperty::class;
-
         $this->connection = $config['connection'] ?? null;
+        $this->table = $config['table'] ?? null;
     }
 
     public function getPropertiesInGroup(string $group): array
     {
         // It means we are editing the settings, so we don't want to
         // rely on the current set Unity.
-        if (request()->routeIs('admin.settings.*')) {
+        if (request()?->routeIs('admin.settings.*')) {
             $unityId = session()->has('settings_scope') && 'global' !== session()->get('settings_scope')
                 ? (int) session()->get('settings_scope')
                 : null;
@@ -40,8 +40,7 @@ class DatabaseSettingsRepository implements SettingsRepository
          */
         $temp = new $this->propertyModel;
 
-        $settings = DB::connection($this->connection ?? $temp->getConnectionName())
-            ->table($temp->getTable())
+        $settings = $this->getBuilder()
             ->where(SettingsProperty::GROUP, $group)
             ->whereNull(SettingsProperty::UNITY_ID)
             ->get([
@@ -50,8 +49,7 @@ class DatabaseSettingsRepository implements SettingsRepository
             ]);
 
         if ($unityId) {
-            $scoped = DB::connection($this->connection ?? $temp->getConnectionName())
-                ->table($temp->getTable())
+            $scoped = $this->getBuilder()
                 ->where(SettingsProperty::GROUP, $group)
                 ->where(SettingsProperty::UNITY_ID, '=', $unityId)
                 ->get([
@@ -81,7 +79,7 @@ class DatabaseSettingsRepository implements SettingsRepository
 
     public function checkIfPropertyExists(string $group, string $name, int $unityId = null): bool
     {
-        return $this->propertyModel::on($this->connection)
+        return $this->getBuilder()
             ->where(SettingsProperty::GROUP, $group)
             ->where(SettingsProperty::UNITY_ID, $unityId)
             ->where(SettingsProperty::NAME, $name)
@@ -90,12 +88,12 @@ class DatabaseSettingsRepository implements SettingsRepository
 
     public function getPropertyPayload(string $group, string $name, int $unityId = null)
     {
-        $setting = $this->propertyModel::on($this->connection)
+        $setting = $this->getBuilder()
             ->where(SettingsProperty::GROUP, $group)
             ->where(SettingsProperty::UNITY_ID, $unityId)
             ->where(SettingsProperty::NAME, $name)
             ->first(SettingsProperty::PAYLOAD)
-            ->toArray();
+            ?->toArray();
 
         return json_decode($setting[SettingsProperty::PAYLOAD]);
     }
@@ -110,9 +108,8 @@ class DatabaseSettingsRepository implements SettingsRepository
         array $options = null,
         bool $isUnique = false,
         bool $encrypted = false
-    ): void
-    {
-        $this->propertyModel::on($this->connection)->create([
+    ): void {
+        $this->getBuilder()->create([
             SettingsProperty::GROUP => $group,
             SettingsProperty::NAME => $name,
             SettingsProperty::LOCKED => false,
@@ -132,10 +129,9 @@ class DatabaseSettingsRepository implements SettingsRepository
         $payload,
         int $unityId = null,
         bool $encrypted = false
-    ): void
-    {
+    ): void {
         if ($unityId === null) {
-            if (request()->routeIs('admin.settings.*')) {
+            if (request()?->routeIs('admin.settings.*')) {
                 $unityId = session()->has('settings_scope') && 'global' !== session()->get('settings_scope')
                     ? (int) session()->get('settings_scope')
                     : null;
@@ -144,7 +140,7 @@ class DatabaseSettingsRepository implements SettingsRepository
             }
         }
 
-        $result = $this->propertyModel::on($this->connection)
+        $this->getBuilder()
             ->where(SettingsProperty::GROUP, $group)
             ->where(SettingsProperty::NAME, $name)
             ->where(SettingsProperty::UNITY_ID, $unityId)
@@ -156,7 +152,7 @@ class DatabaseSettingsRepository implements SettingsRepository
 
     public function deleteProperty(string $group, string $name, int $unityId = null): void
     {
-        $this->propertyModel::on($this->connection)
+        $this->getBuilder()
             ->where(SettingsProperty::GROUP, $group)
             ->where(SettingsProperty::NAME, $name)
             ->where(SettingsProperty::UNITY_ID, $unityId)
@@ -165,7 +161,7 @@ class DatabaseSettingsRepository implements SettingsRepository
 
     public function lockProperties(string $group, array $properties, int $unityId = null): void
     {
-        $this->propertyModel::on($this->connection)
+        $this->getBuilder()
             ->where(SettingsProperty::GROUP, $group)
             ->where(SettingsProperty::UNITY_ID, $unityId)
             ->whereIn(SettingsProperty::NAME, $properties)
@@ -174,7 +170,7 @@ class DatabaseSettingsRepository implements SettingsRepository
 
     public function unlockProperties(string $group, array $properties, int $unityId = null): void
     {
-        $this->propertyModel::on($this->connection)
+        $this->getBuilder()
             ->where(SettingsProperty::GROUP, $group)
             ->where(SettingsProperty::UNITY_ID, $unityId)
             ->whereIn(SettingsProperty::NAME, $properties)
@@ -183,11 +179,26 @@ class DatabaseSettingsRepository implements SettingsRepository
 
     public function getLockedProperties(string $group, int $unityId = null): array
     {
-        return $this->propertyModel::on($this->connection)
+        return $this->getBuilder()
             ->where(SettingsProperty::GROUP, $group)
             ->where(SettingsProperty::UNITY_ID, $unityId)
             ->where(SettingsProperty::LOCKED, true)
             ->pluck(SettingsProperty::NAME)
             ->toArray();
+    }
+
+    public function getBuilder(): Builder
+    {
+        $model = new $this->propertyModel;
+
+        if ($this->connection) {
+            $model->setConnection($this->connection);
+        }
+
+        if ($this->table) {
+            $model->setTable($this->table);
+        }
+
+        return $model->newQuery();
     }
 }
