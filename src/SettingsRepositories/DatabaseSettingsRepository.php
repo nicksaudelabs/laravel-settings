@@ -71,7 +71,7 @@ class DatabaseSettingsRepository implements SettingsRepository
         }
 
         return collect($settings)
-            ->mapWithKeys(function ($item) {
+            ->mapWithKeys(function (object $item) {
                 return [$item->{SettingsProperty::NAME} => json_decode($item->{SettingsProperty::PAYLOAD}, true)];
             })
             ->toArray();
